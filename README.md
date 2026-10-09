@@ -11,20 +11,6 @@ The workflow has two parts:
 
 *ExcelLAR workflow and module structure.*
 
-## Repository Structure
-
-```
-ExcelLAR/
-├── src/
-│   ├── ExcelLAR.xlam     Excel add-in (the file you install)
-│   ├── ExcelLAR.lsp      AutoLISP geometry exporter for AutoCAD
-│   └── vba/              Exported VBA source code (modules and user form)
-├── examples/             Sample CSV input files and benchmarks
-├── docs/figures/         Figures used in this README
-├── LICENSE
-└── README.md
-```
-
 ## Prerequisites
 
 ExcelLAR requires Microsoft Excel for Windows with two solvers installed: the built-in Excel Solver and OpenSolver.
