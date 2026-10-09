@@ -1,11 +1,11 @@
-(defun c:ExcelLa (/ ss_blocks ss_fill pt_left pt_right center_pt output_file f
+(defun c:ExcelLAR (/ ss_blocks ss_fill pt_left pt_right center_pt output_file f
                     depth gamma has_fill fill_depth fill_gamma
                     force_input force_indices force_list f_method vec_str vec_vals fx fy p1 p2 len
                     block_data fill_data sorted_blocks final_blocks
                     final_blocks_with_forces first_blk last_blk left_abut_edge right_abut_edge
                     all_interfaces line_lengths line_angles midpoints ds_values
                     node_rows interface_rows max_rows row_idx pt_row int_row force_row
-                    old_delobj last_ent open_csv)
+                    old_delobj last_ent open_csv missing_edge)
 
   (vl-load-com)
 
@@ -55,6 +55,9 @@
   (setq force_input (getstring t "\nEnter block indices for external forces (comma-separated, e.g., 1,3,5) or press Enter for none: "))
   (setq force_indices (ParseIndices force_input))
   (setq force_list '())
+  (if (null force_indices)
+    (alert "WARNING: no external (live) force was entered.\n\nThe limit analysis scales this force to collapse; without it the problem is unbounded and the solver fails.")
+  )
   
   (if force_indices
     (progn
@@ -191,7 +194,7 @@
           
           ;; 1. Left Abutment
           (setq first_blk (car final_blocks_with_forces))
-          (setq left_abut_edge (ClosestEdgeToPoint (nth 3 first_blk) pt_left))
+          (setq left_abut_edge (AbutmentEdge (nth 0 first_blk) (nth 0 (nth 1 final_blocks_with_forces)) pt_left))
           (setq all_interfaces (append all_interfaces (list left_abut_edge)))
           
           ;; 2. Internal Interfaces
@@ -202,14 +205,30 @@
             (setq shared (FindSharedEdge entA entB))
             (if shared
               (setq all_interfaces (append all_interfaces (list shared)))
-              (princ (strcat "\nWarning: No shared edge found between blocks " (itoa (1+ i)) " and " (itoa (+ i 2))))
+              ;; FIX: skipping the interface shifted every later Len/Fi row by one block.
+              (progn
+                (setq missing_edge (strcat "No shared edge between blocks " (itoa (1+ i)) " and " (itoa (+ i 2))
+                                           ". Neighbouring blocks must have two common vertices (check with OSNAP/OVERKILL)."))
+                (princ (strcat "\nERROR: " missing_edge))
+              )
             )
             (setq i (1+ i))
           )
           
+          (if missing_edge
+            (progn
+              (close f)
+              (setvar "DELOBJ" old_delobj)
+              (alert (strcat "Export aborted - the CSV would be wrong:\n\n" missing_edge))
+              (exit)
+            )
+          )
+
           ;; 3. Right Abutment
           (setq last_blk (last final_blocks_with_forces))
-          (setq right_abut_edge (ClosestEdgeToPoint (nth 3 last_blk) pt_right))
+          (setq right_abut_edge (AbutmentEdge (nth 0 last_blk)
+                                              (nth 0 (nth (- (length final_blocks_with_forces) 2) final_blocks_with_forces))
+                                              pt_right))
           (setq all_interfaces (append all_interfaces (list right_abut_edge)))
 
           ;; Order Interface points
@@ -349,7 +368,7 @@
   data_list
 )
 
-(defun GetPolyPts (ent / obj pts pt_list i ubound)
+(defun GetPolyPts (ent / obj pts pt_list i ubound pt)
   (setq obj (vlax-ename->vla-object ent))
   (setq pts (vlax-variant-value (vla-get-Coordinates obj)))
   (setq i 0 pt_list '())
@@ -357,36 +376,48 @@
     (progn
       (setq ubound (vlax-safearray-get-u-bound pts 1))
       (while (< i ubound)
-        (setq pt_list (append pt_list (list (list (vlax-safearray-get-element pts i)
-                                                  (vlax-safearray-get-element pts (+ i 1))))))
+        (setq pt (list (vlax-safearray-get-element pts i) (vlax-safearray-get-element pts (+ i 1))))
+        ;; FIX: skip a vertex equal to the previous one (zero-length segment)
+        (if (or (null pt_list) (> (distance pt (last pt_list)) 1e-6))
+          (setq pt_list (append pt_list (list pt)))
+        )
         (setq i (+ i 2))
+      )
+      ;; FIX: drop the closing vertex if the polyline repeats its first point
+      (if (and (> (length pt_list) 2) (< (distance (car pt_list) (last pt_list)) 1e-6))
+        (setq pt_list (reverse (cdr (reverse pt_list))))
       )
     )
   )
   pt_list
 )
 
-(defun MakeSegments (pts / segs i)
+(defun MakeSegments (pts / segs i a b)
   (setq segs '() i 0)
   (while (< i (length pts))
-    (if (= i (- (length pts) 1))
-      (setq segs (append segs (list (list (nth i pts) (nth 0 pts)))))
-      (setq segs (append segs (list (list (nth i pts) (nth (+ i 1) pts)))))
+    (setq a (nth i pts))
+    (setq b (if (= i (- (length pts) 1)) (nth 0 pts) (nth (+ i 1) pts)))
+    ;; FIX: a zero-length segment (duplicated vertex) is not an edge
+    (if (> (distance a b) 1e-6)
+      (setq segs (append segs (list (list a b))))
     )
     (setq i (1+ i))
   )
   segs
 )
 
-(defun FindSharedEdge (entA entB / segsA segsB shared)
+(defun FindSharedEdge (entA entB / segsA segsB shared best_len)
   (setq segsA (MakeSegments (GetPolyPts entA)))
   (setq segsB (MakeSegments (GetPolyPts entB)))
-  (setq shared nil)
+  (setq shared nil best_len 0.0)
   (foreach a segsA
     (foreach b segsB
-      (if (or (and (equal (car a) (car b) 1e-4) (equal (cadr a) (cadr b) 1e-4))
-              (and (equal (car a) (cadr b) 1e-4) (equal (cadr a) (car b) 1e-4)))
-        (setq shared a)
+      (if (and (or (and (equal (car a) (car b) 1e-4) (equal (cadr a) (cadr b) 1e-4))
+                   (and (equal (car a) (cadr b) 1e-4) (equal (cadr a) (car b) 1e-4)))
+               (> (distance (car a) (cadr a)) best_len))
+        ;; FIX: keep the LONGEST common edge (it used to keep the last match, which could be
+        ;; a zero-length segment -> Len = 0 and Fi = -90 in the CSV)
+        (setq shared a best_len (distance (car a) (cadr a)))
       )
     )
   )
@@ -404,6 +435,31 @@
     )
   )
   (>= count 2)
+)
+
+;; FIX: ground face of an end block. Only edges that touch neither end of the edge shared with
+;; the neighbouring block can be the abutment (for a voussoir: the face opposite the joint).
+;; The clicked point picks among those. Using the nearest edge of ALL edges could select the
+;; intrados/extrados face when the click was near a corner (wrong Len/Fi -> infeasible analysis).
+(defun AbutmentEdge (ent nb_ent click / shared segs cands minDist bestSeg d)
+  (setq segs (MakeSegments (GetPolyPts ent)))
+  (setq shared (FindSharedEdge ent nb_ent))
+  (setq cands '())
+  (if shared
+    (foreach seg segs
+      (if (not (or (equal (car seg) (car shared) 1e-4) (equal (car seg) (cadr shared) 1e-4)
+                   (equal (cadr seg) (car shared) 1e-4) (equal (cadr seg) (cadr shared) 1e-4)))
+        (setq cands (append cands (list seg)))
+      )
+    )
+  )
+  (if (null cands) (setq cands segs))
+  (setq minDist 1e99 bestSeg nil)
+  (foreach seg cands
+    (setq d (DistPointToSegment click (car seg) (cadr seg)))
+    (if (< d minDist) (setq minDist d bestSeg seg))
+  )
+  bestSeg
 )
 
 (defun ClosestEdgeToPoint (pts pt / minDist bestSeg segs d)
@@ -484,5 +540,5 @@
   res
 )
 
-(princ "\nType ExcelLa to run the static block exporter.")
+(princ "\nType ExcelLAR to run the static block exporter.")
 (princ)

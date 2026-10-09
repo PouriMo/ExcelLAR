@@ -1,7 +1,10 @@
 Attribute VB_Name = "Module7"
 Option Explicit
 
-Sub PlotThrustLine(Optional wsDataIn As Worksheet)
+' scaleK   : multiplies the chart size, fonts, line weights and markers (used for hi-res PNG export)
+' plotName : name of the sheet that receives the chart
+Sub PlotThrustLine(Optional wsDataIn As Worksheet, Optional ByVal scaleK As Double = 1, _
+                   Optional ByVal plotName As String = "ThrustPlot")
     Dim wsData As Worksheet, wsForces As Worksheet, wsPlot As Worksheet
     Dim wbUser As Workbook
     Dim i As Long, j As Long, NI As Long, NB As Long, lam As Double
@@ -87,14 +90,18 @@ Sub PlotThrustLine(Optional wsDataIn As Worksheet)
         thrX(i) = midx + e * dx: thrY(i) = midy + e * dy
     Next i
 
-    Dim rawH() As Long, nRaw As Long, finalH() As Long, nHinges As Long
-    Call FindHingeCandidates(eVec, tArr, NI, rawH, nRaw)
-    Call ReduceToFourHinges(rawH, nRaw, eVec, finalH, nHinges)
+    ' Hinges = the admissible four-hinge mechanism with the smallest kinematic multiplier
+    ' (see FindCollapseMechanism in Module9). No markers if there is none.
+    Dim finalH() As Long, hSide() As Long, hX() As Double, hY() As Double
+    Dim lamKin As Double, mechSign As Long, nHinges As Long
+    nHinges = 0
+    If FindCollapseMechanism(wsData, NB, bx, by, p1x, p1y, p2x, p2y, tArr, eVec, _
+                             finalH, hSide, hX, hY, lamKin, mechSign) Then nHinges = 4
 
     Application.DisplayAlerts = False
-    On Error Resume Next: wbUser.Sheets("ThrustPlot").Delete: On Error GoTo ErrorHandler
+    On Error Resume Next: wbUser.Sheets(plotName).Delete: On Error GoTo ErrorHandler
     Application.DisplayAlerts = True
-    Set wsPlot = wbUser.Sheets.Add: wsPlot.Name = "ThrustPlot"
+    Set wsPlot = wbUser.Sheets.Add: wsPlot.Name = plotName
 
     ' ---------- COLUMN LAYOUT (all data left of column N) ----------
     '   A=BlockX     B=BlockY
@@ -260,11 +267,11 @@ Sub PlotThrustLine(Optional wsDataIn As Worksheet)
     Dim forceRows As Long: forceRows = frow - 1
 
     ' ---- Create chart, placed at column ~O ----
-    Dim ch As ChartObject: Set ch = wsPlot.ChartObjects.Add(Left:=800, Top:=10, Width:=750, Height:=420)
+    Dim ch As ChartObject: Set ch = wsPlot.ChartObjects.Add(Left:=800, Top:=10, Width:=750 * scaleK, Height:=420 * scaleK)
     With ch.Chart
         .ChartType = xlXYScatterLines
         .HasTitle = True: .ChartTitle.Text = "Thrust Line - lambda = " & Format$(lam, "0.00") & " [N]"
-        .ChartTitle.Font.Size = 16: .ChartTitle.Font.Bold = True
+        .ChartTitle.Font.Size = 16 * scaleK: .ChartTitle.Font.Bold = True
 
         ' Chart background WHITE (visible), plot area transparent, no
         ' borders. White background is essential for GIF export to render
@@ -277,76 +284,48 @@ Sub PlotThrustLine(Optional wsDataIn As Worksheet)
         Do While .SeriesCollection.Count > 0: .SeriesCollection(1).Delete: Loop
 
         With .Axes(xlCategory, xlPrimary)
-            .HasTitle = True: .AxisTitle.Text = "x [mm]": .AxisTitle.Font.Size = 12
-            .TickLabels.Font.Size = 11
+            .HasTitle = True: .AxisTitle.Text = "x [mm]": .AxisTitle.Font.Size = 12 * scaleK
+            .TickLabels.Font.Size = 11 * scaleK
+            .Format.Line.Weight = 0.75 * scaleK
             .HasMajorGridlines = True
             With .MajorGridlines.Format.Line
-                .Visible = msoTrue: .ForeColor.RGB = RGB(190, 190, 190): .Weight = 0.75: .DashStyle = msoLineDash
+                .Visible = msoTrue: .ForeColor.RGB = RGB(190, 190, 190): .Weight = 0.75 * scaleK: .DashStyle = msoLineDash
             End With
         End With
         With .Axes(xlValue, xlPrimary)
-            .HasTitle = True: .AxisTitle.Text = "y [mm]": .AxisTitle.Font.Size = 12
-            .TickLabels.Font.Size = 11
+            .HasTitle = True: .AxisTitle.Text = "y [mm]": .AxisTitle.Font.Size = 12 * scaleK
+            .TickLabels.Font.Size = 11 * scaleK
+            .Format.Line.Weight = 0.75 * scaleK
             .HasMajorGridlines = True
             With .MajorGridlines.Format.Line
-                .Visible = msoTrue: .ForeColor.RGB = RGB(190, 190, 190): .Weight = 0.75: .DashStyle = msoLineDash
+                .Visible = msoTrue: .ForeColor.RGB = RGB(190, 190, 190): .Weight = 0.75 * scaleK: .DashStyle = msoLineDash
             End With
         End With
-        .Legend.Font.Size = 11
+        .Legend.Font.Size = 11 * scaleK
 
         With .SeriesCollection.NewSeries
             .Name = "Arch": .XValues = wsPlot.Range("A2:A" & blockRows): .Values = wsPlot.Range("B2:B" & blockRows)
-            .Format.Line.ForeColor.RGB = RGB(0, 0, 0): .MarkerStyle = xlMarkerStyleNone
+            .Format.Line.ForeColor.RGB = RGB(0, 0, 0): .Format.Line.Weight = 2.25 * scaleK: .MarkerStyle = xlMarkerStyleNone
         End With
         With .SeriesCollection.NewSeries
             .Name = "Thrust line": .XValues = wsPlot.Range("C2:C" & NI + 1): .Values = wsPlot.Range("D2:D" & NI + 1)
-            .Format.Line.ForeColor.RGB = RGB(220, 20, 60): .Format.Line.Weight = 2: .MarkerStyle = xlMarkerStylePlus: .MarkerSize = 7: .MarkerForegroundColor = RGB(220, 20, 60)
+            .Format.Line.ForeColor.RGB = RGB(220, 20, 60): .Format.Line.Weight = 2 * scaleK: .MarkerStyle = xlMarkerStylePlus
+            .MarkerSize = WorksheetFunction.Min(72, WorksheetFunction.Max(2, CLng(7 * scaleK))): .MarkerForegroundColor = RGB(220, 20, 60)
         End With
     End With
 
-    ' ---- Padding: extend by 1 whole major-unit each side, integer ticks ----
+    ' ---- Equal-scale axes (1 mm on x = 1 mm on y); the box holds blocks, backfill and force arrows ----
+    Call SetEqualAspectAxes(ch.Chart, xMinAll, xMaxAll, yMinAll, yMaxAll)
     On Error Resume Next
-    With ch.Chart
-        .Axes(xlCategory).MinimumScaleIsAuto = True
-        .Axes(xlCategory).MaximumScaleIsAuto = True
-        .Axes(xlValue).MinimumScaleIsAuto = True
-        .Axes(xlValue).MaximumScaleIsAuto = True
-        DoEvents
-        Dim majX As Double, majY As Double
-        majX = .Axes(xlCategory).MajorUnit
-        majY = .Axes(xlValue).MajorUnit
-        .Axes(xlCategory).MinimumScale = .Axes(xlCategory).MinimumScale - majX
-        .Axes(xlCategory).MaximumScale = .Axes(xlCategory).MaximumScale + majX
-        .Axes(xlValue).MinimumScale = .Axes(xlValue).MinimumScale - majY
-        .Axes(xlValue).MaximumScale = .Axes(xlValue).MaximumScale + majY
-
-        ' FIX (border pushes/clips backfill): Excel's autoscale above only
-        ' considered the "Arch" and "Thrust line" series - it knows nothing
-        ' about backfill or force-arrow geometry (those are hand-drawn
-        ' shapes, not series). Widen the scale further, if needed, so the
-        ' FULL bounding box computed earlier (xMinAll/xMaxAll/yMinAll/
-        ' yMaxAll, which DOES include backfill + arrows) is guaranteed to
-        ' fit with the same one-major-unit margin. This is what
-        ' DrawBlocksOnChart's pixel mapping relies on to avoid clipping
-        ' backfill against the chart border.
-        Dim padX As Double, padY As Double
-        padX = 0.1 * (xMaxAll - xMinAll): If padX <= 0 Then padX = majX
-        padY = 0.1 * (yMaxAll - yMinAll): If padY <= 0 Then padY = majY
-        If xMinAll - padX < .Axes(xlCategory).MinimumScale Then .Axes(xlCategory).MinimumScale = xMinAll - padX
-        If xMaxAll + padX > .Axes(xlCategory).MaximumScale Then .Axes(xlCategory).MaximumScale = xMaxAll + padX
-        If yMinAll - padY < .Axes(xlValue).MinimumScale Then .Axes(xlValue).MinimumScale = yMinAll - padY
-        If yMaxAll + padY > .Axes(xlValue).MaximumScale Then .Axes(xlValue).MaximumScale = yMaxAll + padY
-
-        .Axes(xlCategory).TickLabels.NumberFormat = "0"
-        .Axes(xlValue).TickLabels.NumberFormat = "0"
-    End With
-    DoEvents
+    ch.Chart.Axes(xlCategory).TickLabels.NumberFormat = "0"
+    ch.Chart.Axes(xlValue).TickLabels.NumberFormat = "0"
     On Error GoTo ErrorHandler
+    DoEvents
 
-    Call DrawBlocksOnChart(ch.Chart.Parent, wsPlot, 1, 2, 2, blockRows, RGB(242, 136, 89), RGB(0, 0, 0), 1, False)
-    If backRows > 1 Then Call DrawBlocksOnChart(ch.Chart.Parent, wsPlot, 7, 8, 2, backRows, RGB(0, 0, 0), RGB(100, 100, 100), 1, True)
-    If forceRows > 1 Then Call DrawForceArrows(ch.Chart.Parent, wsPlot, 9, 10, 11, 12, 2, forceRows, RGB(0, 112, 192))
-    Call DrawHingesOnChart(ch.Chart.Parent, wsPlot, 5, 6, 2, nHinges + 1, RGB(220, 20, 60))
+    Call DrawBlocksOnChart(ch.Chart.Parent, wsPlot, 1, 2, 2, blockRows, RGB(242, 136, 89), RGB(0, 0, 0), 1 * scaleK, False)
+    If backRows > 1 Then Call DrawBlocksOnChart(ch.Chart.Parent, wsPlot, 7, 8, 2, backRows, RGB(0, 0, 0), RGB(100, 100, 100), 1 * scaleK, True)
+    If forceRows > 1 Then Call DrawForceArrows(ch.Chart.Parent, wsPlot, 9, 10, 11, 12, 2, forceRows, RGB(0, 112, 192), scaleK)
+    If nHinges > 0 Then Call DrawHingesOnChart(ch.Chart.Parent, wsPlot, 5, 6, 2, nHinges + 1, RGB(220, 20, 60), scaleK)
     Exit Sub
 
 ErrorHandler:

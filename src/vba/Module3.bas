@@ -80,7 +80,12 @@ Sub CreateFassSheet()
         wsFass.Cells(fassRow + 2, "A").Value = 0
 
         ' F_ass_lam (Live Load Vectors drawn by user)
-        wsFass.Cells(fassRow, "B").Value = fx(i)
+        ' The equilibrium rows of Gass give  G*x = -(applied load)  (see the weight row: a downward
+        ' weight w is entered as +w). So BOTH components of the live load enter with a minus sign.
+        ' FIX: the x component used to be +fx, i.e. horizontal loads were applied in the opposite
+        ' direction to the arrow drawn on the plot (checked against the kinematic multiplier of
+        ' the collapse mechanism: they only agree with -fx).
+        wsFass.Cells(fassRow, "B").Value = -fx(i)
         wsFass.Cells(fassRow + 1, "B").Value = -fy(i)
         wsFass.Cells(fassRow + 2, "B").Value = 0
 

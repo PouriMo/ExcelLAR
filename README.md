@@ -1,96 +1,127 @@
-### ExcelLa: Static Limit Analysis Toolkit
+# ExcelLAR: Static Limit Analysis of Arches
 
-ExcelLa is a macro-enabled Excel application built for the static limit analysis of masonry structures. Use it to evaluate the structural stability of 2D masonry curved geometry. The tool formulates the equilibrium conditions as a linear programming problem and solves them directly within the spreadsheet environment.
+ExcelLAR is a Microsoft Excel add-in for the static (lower-bound) limit analysis of 2D masonry arches. It formulates the equilibrium conditions of a rigid-block arch as a linear programming problem and solves it directly in the spreadsheet. ExcelLAR computes the collapse load multiplier (λ), plots the thrust line, and identifies the collapse mechanism with its hinge locations.
 
-## Prerequisites and Solvers
+The workflow has two parts:
 
-You must configure Excel with two specific solvers before running the analysis.
+1. An AutoLISP script (`ExcelLAR.lsp`) extracts the block geometry from an AutoCAD drawing and writes it to a CSV file.
+2. The Excel add-in (`ExcelLAR.xlam`) imports the CSV file, runs the analysis, and displays the results.
 
-1. Open Excel and navigate to **File** > **Options** > **Add-ins**.
-2. Select **Excel Add-ins** from the Manage dropdown menu and click **Go**.
-3. Check the box for **Solver Add-in** and click **OK** to enable the native solver.
+![ExcelLAR workflow](docs/figures/workflow_diagram.png)
+
+*ExcelLAR workflow and module structure.*
+
+## Repository Structure
+
+```
+ExcelLAR/
+├── src/
+│   ├── ExcelLAR.xlam     Excel add-in (the file you install)
+│   ├── ExcelLAR.lsp      AutoLISP geometry exporter for AutoCAD
+│   └── vba/              Exported VBA source code (modules and user form)
+├── examples/             Sample CSV input files and benchmarks
+├── docs/figures/         Figures used in this README
+├── LICENSE
+└── README.md
+```
+
+## Prerequisites
+
+ExcelLAR requires Microsoft Excel for Windows with two solvers installed: the built-in Excel Solver and OpenSolver.
+
+1. In Excel, go to **File** > **Options** > **Add-ins**.
+2. Choose **Excel Add-ins** in the **Manage** list and click **Go**.
+3. Check **Solver Add-in** and click **OK**.
 4. Download the latest version of OpenSolver from https://opensolver.org.
-5. Extract the downloaded ZIP file to a permanent folder on your computer.
-6. Open Excel and return to the Add-ins menu.
-7. Click **Browse** and locate the extracted `OpenSolver.xlam` file.
-8. Select the file to load the OpenSolver add-in into your Excel session. Make sure both solvers are checked in the Add-ins dialog.
+5. Extract the ZIP file to a permanent folder on your computer.
+6. Return to the Add-ins dialog (steps 1 and 2) and click **Browse**.
+7. Select the extracted `OpenSolver.xlam` file. Make sure both **Solver Add-in** and **OpenSolver** are checked.
 
 <img width="1103" height="678" alt="Fig1" src="https://github.com/user-attachments/assets/95bb1d26-b676-4877-ad94-8dc6fbfa719c" />
 
-*Figure 1: Excel Options menu showing active Add-ins.*
-
+*Figure 1: Excel Options menu showing the active add-ins.*
 
 <img width="283" height="395" alt="Fig2" src="https://github.com/user-attachments/assets/85c71e65-5833-42ed-a0b5-b2072423a817" />
 
-*Figure 2: Ensure both Solver Add-in and OpenSolver are checked.*
-
+*Figure 2: Both Solver Add-in and OpenSolver must be checked.*
 
 <img width="1916" height="130" alt="Fig3" src="https://github.com/user-attachments/assets/5003c78f-ff06-4ffe-8881-c3fc7ce22def" />
 
-*Figure 3: Successful installation displays both tools on the Data ribbon.*
+*Figure 3: After a successful installation, both tools appear on the Data ribbon.*
+
+## Installing ExcelLAR
+
+1. Download `src/ExcelLAR.xlam` from this repository and save it in a permanent folder.
+2. Right-click the downloaded file, choose **Properties**, check **Unblock** (if shown), and click **OK**. Windows blocks macros in files downloaded from the internet until you do this.
+3. In Excel, go to **File** > **Options** > **Add-ins**, choose **Excel Add-ins** in the **Manage** list, and click **Go**.
+4. Click **Browse**, select `ExcelLAR.xlam`, and click **OK**. Make sure **ExcelLAR** is checked in the list.
+
+The add-in now loads every time Excel starts. Press **Ctrl+Shift+A** in any workbook to open ExcelLAR.
 
 ## Step 1: Geometry Extraction in AutoCAD
 
-You must generate your geometric data using the provided AutoLISP script before opening Excel.
+Generate the geometry file with the AutoLISP script before opening Excel.
 
 1. Open your 2D masonry arch model in AutoCAD.
-2. Ensure all blocks and backfill elements are drawn as closed `LWPOLYLINE` or `POLYLINE` entities.
-3. Type `APPLOAD` in the command line and load the `ExcelLa.lsp` file.
-4. Type `ExcelLa` in the command line to start the extraction routine.
-5. Click the exact center point of the arch geometry.
-6. Click a point directly on the edge of the left ground abutment.
-7. Click a point directly on the edge of the right ground abutment.
-8. Select all structural block polylines when prompted.
-9. Type "Yes" if your model includes backfill and select the backfill polylines.
-10. Enter the numerical properties for depth (mm) and specific weight (kg/m^3).
-11. Enter specific block indices if you need to apply external force vectors.
-12. Define the force vectors by typing their components or drawing them on screen.
-13. Save the resulting CSV file to your local computer.
+2. Make sure every block and backfill element is drawn as a closed `LWPOLYLINE` or `POLYLINE`.
+3. Type `APPLOAD` in the command line and load `src/ExcelLAR.lsp`.
+4. Type `ExcelLAR` to start the export routine.
+5. Click the center point of the arch.
+6. Click a point on the edge of the left ground abutment.
+7. Click a point on the edge of the right ground abutment.
+8. Select all block polylines.
+9. If the model includes backfill, answer **Yes** and select the backfill polylines.
+10. Enter the block depth (mm) and specific weight (kg/m³), and the backfill properties if applicable.
+11. To apply external forces, enter the indices of the loaded blocks (for example `1,3,5`). Press **Enter** for none.
+12. Define each force vector by typing its components or by drawing it on screen.
+13. Save the resulting CSV file.
+
+Ready-to-use CSV files are available in the `examples/` folder if you want to try ExcelLAR without AutoCAD.
 
 ## Step 2: Limit Analysis in Excel
 
-1. Download the `ExcelLa_v1.0.xlsm` file from this repository.
-2. Open the `ExcelLa_v1.0.xlsm` file in Microsoft Excel.
-3. Click **Enable Content** or **Enable Macros** if the yellow security bar appears.
-4. Press **Ctrl+Shift+A** to open the main user interface.
-5. Click **Import CSV File** and select the file generated by the AutoLISP script.
-6. Select the imported data sheet from the dropdown menu.
-7. Click **Run Analysis** to compute the collapse multiplier.
-8. Navigate through the tabs to view the Thrust Line and Deformed Shape plots.
+1. Open Excel and press **Ctrl+Shift+A** to open the ExcelLAR window.
+2. Click **Import CSV File** and select the file generated by the AutoLISP script (or one from `examples/`).
+3. Select the imported data sheet from the drop-down list.
+4. Click **Run Analysis** to compute the collapse load multiplier.
+5. Open the **Thrust Line** and **Deformed Shape** tabs to view the results.
+6. Choose a **PNG quality** and click **Export PNG** to save a plot as an image.
 
-<img width="914" height="713" alt="Fig7" src="https://github.com/user-attachments/assets/7ae93d13-9967-4120-8e8e-a9caba48b3c2" />
+<img width="914" height="713" alt="Fig4" src="https://github.com/user-attachments/assets/7ae93d13-9967-4120-8e8e-a9caba48b3c2" />
 
-*Figure 4: The main ExcelLa interface for data import and analysis execution.*
+*Figure 4: The ExcelLAR window for data import and analysis.*
 
-<img width="913" height="722" alt="Fig8" src="https://github.com/user-attachments/assets/aa968456-6d19-449c-87ad-c90939a5e954" />
+![Thrust line](docs/figures/fig5_thrust_line.png)
 
-*Figure 5: Generated Thrust Line showing the pressure curve within the masonry blocks.*
+*Figure 5: Thrust line inside the masonry blocks, with the hinge locations marked.*
 
-<img width="917" height="724" alt="Fig9" src="https://github.com/user-attachments/assets/62db64a4-f8e8-4615-af8c-721247d96411" />
+![Deformed shape](docs/figures/fig6_deformed_shape.png)
 
-*Figure 6: Generated Deformed Shape showing the collapse mechanism and hinge locations.*
+*Figure 6: Collapse mechanism, showing the deformed shape over the original geometry and the hinge locations.*
 
 ## Developer Access
 
-Researchers wishing to view or modify the source code can access the Visual Basic Editor by pressing **Alt+F11** while the workbook is open.
+The full VBA source code is in `src/vba/`. To view or modify it inside Excel, press **Alt+F11** to open the Visual Basic Editor and expand the project for `ExcelLAR.xlam`. To rebuild the add-in from the exported files, import the `.bas` modules and `ExcelLAR.frm` (with its `ExcelLAR.frx` file next to it) into a new workbook and save it as an Excel Add-in (`.xlam`).
 
-## Troubleshooting and Checkpoints
+## Troubleshooting
 
-If the tool stops working, verify the following system requirements:
+If ExcelLAR does not run, check the following:
 
-* **Macro Security:** Ensure Excel is configured to allow VBA macros and has access to the project object model. Go to **Trust Center Settings** > **Macro Settings**. Check "Enable VBA macros" and "Trust access to the VBA project object model".
-* **Trusted Locations:** If OpenSolver fails to run, add its extracted folder to your Excel Trusted Locations. Go to **Trust Center Settings** > **Trusted Locations** and add the path.
+* **Macro security:** Go to **File** > **Options** > **Trust Center** > **Trust Center Settings** > **Macro Settings**. Select **Enable VBA macros** and check **Trust access to the VBA project object model**. ExcelLAR needs this access to connect to the Solver add-in.
+* **Trusted Locations:** If OpenSolver fails to run, add its folder (and the folder containing `ExcelLAR.xlam`) to **Trust Center Settings** > **Trusted Locations**.
+* **Blocked file:** If the add-in loads but macros are disabled, unblock `ExcelLAR.xlam` as described in [Installing ExcelLAR](#installing-excellar).
+* **Solver Add-in:** Make sure the built-in Excel Solver is checked in the Add-ins dialog.
+* **OpenSolver:** Make sure OpenSolver is loaded. It is required for models with many blocks.
+* **Data format:** Use the CSV file exactly as generated by the AutoLISP script. Do not edit the column headers.
 
+<img width="1119" height="672" alt="Fig7" src="https://github.com/user-attachments/assets/58d543be-b5b8-46c9-84ca-712dafc11f58" />
 
-<img width="1119" height="672" alt="Fig6" src="https://github.com/user-attachments/assets/58d543be-b5b8-46c9-84ca-712dafc11f58" />
+*Figure 7: Required macro settings in the Excel Trust Center.*
 
-*Figure 7: Required Macro Settings in the Excel Trust Center.*
+<img width="1119" height="673" alt="Fig8" src="https://github.com/user-attachments/assets/1a0f3260-2586-4091-a8e1-0aae5895399e" />
 
-<img width="1119" height="673" alt="Fig5" src="https://github.com/user-attachments/assets/1a0f3260-2586-4091-a8e1-0aae5895399e" />
+*Figure 8: Adding the OpenSolver folder to Trusted Locations prevents blocked execution.*
 
+## License
 
-*Figure 8: Adding the OpenSolver folder to Trusted Locations prevents execution blocks.*
-
-* **Solver Add-in:** Verify the native Excel Solver add-in is checked in the Add-ins menu.
-* **OpenSolver:** Verify the OpenSolver add-in is loaded. The tool requires this for highly discretized models with many blocks.
-* **Data Format:** Ensure your input data follows the exact CSV structure generated by the LISP export script. Do not modify the CSV column headers manually.
+This project is licensed under the terms in the [LICENSE](LICENSE) file.
