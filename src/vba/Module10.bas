@@ -121,3 +121,20 @@ Public Sub ExtendBoundsFromColumns(ws As Worksheet, ByVal xCol As Long, ByVal yC
         End If
     Next r
 End Sub
+
+' Title of the plots: dimensionless multiplier and collapse force, with the unit of the force.
+Public Function PlotTitle(ByVal kind As String, ByVal lam As Double, ByVal Pu As Double) As String
+    PlotTitle = kind & ": " & ChrW(955) & "u = " & Format$(lam, "0.00") & ", Pu = " & _
+                Format$(Pu, "0.00") & " " & UnitForce()
+End Function
+
+' Sets the "u" of lambda_u and P_u as a subscript (cosmetic: ignored if the chart refuses it).
+Public Sub SubscriptTitle(ch As Chart)
+    Dim s As String, p As Long
+    On Error Resume Next
+    s = ch.ChartTitle.Text
+    p = InStr(s, ChrW(955) & "u")
+    If p > 0 Then ch.ChartTitle.Format.TextFrame2.TextRange.Characters(p + 1, 1).Font.Subscript = msoTrue
+    p = InStr(s, "Pu")
+    If p > 0 Then ch.ChartTitle.Format.TextFrame2.TextRange.Characters(p + 1, 1).Font.Subscript = msoTrue
+End Sub

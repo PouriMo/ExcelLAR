@@ -27,7 +27,7 @@ Sub CreateOptimizationSheet()
     numRows = lastRowAin - 1
 
     With wsOpt
-        .Range("A2").Value = "Solution/variables"
+        .Range("A2").Value = "Scaled solution"
         .Range("B1").Value = "N" & headerNumber
         .Range("C1").Value = "V" & headerNumber
         .Range("D1").Value = "M" & headerNumber
@@ -56,18 +56,19 @@ Sub CreateOptimizationSheet()
         Next i
 
         ' ========================================================
-        ' CHANGE 1: read Ain/Bin into arrays, row-normalize, write
+        ' Row and column scaling of the reduced LP
         ' ========================================================
-        ' Why: on fine discretizations (small Deltas), the coefficients
-        ' of different constraint rows span many orders of magnitude
-        ' (some ~ t/Deltas ~ big, some ~ 1). Simplex LP cannot resolve
-        ' the true optimum when rows differ so drastically in scale,
-        ' so it returns the trivial lambda = 0 solution. Dividing each
-        ' row (and its RHS) by the row's max |coefficient| makes every
-        ' constraint O(1) WITHOUT changing the feasible region -
-        ' the LP solution is mathematically identical.
+        ' The coefficients of the constraint rows and of the four variables differ by
+        ' several orders of magnitude (forces, moments, multiplier). OpenSolver silently
+        ' discards every coefficient smaller than 1E-5 when it builds the model, so an
+        ' unscaled or badly scaled table is solved as a different problem. Each column is
+        ' divided by its largest |coefficient| and each row, with its right-hand side, by
+        ' its largest |coefficient|; two passes are repeated. The right-hand side takes no
+        ' part in the choice of the row factor: dividing by it shrinks the coefficients.
+        ' The feasible region is unchanged: the variables on this sheet are x_scaled = c * x,
+        ' with the factors c in row 4, and Module 6 recovers x = x_scaled / c.
         Dim nRowsC As Long: nRowsC = lastRowAin - 1
-        Dim ainVals() As Double, binVals() As Double
+        Dim ainVals() As Double, binVals() As Double, colScale(1 To 4) As Double
         ReDim ainVals(1 To nRowsC, 1 To 4)
         ReDim binVals(1 To nRowsC)
 
@@ -78,20 +79,54 @@ Sub CreateOptimizationSheet()
             binVals(i) = CDbl(wsBin.Cells(i + 1, 1).Value)
         Next i
 
-        Dim rowMax As Double
-        For i = 1 To nRowsC
-            rowMax = 0
+        Dim pass As Long, vMax As Double
+        For j = 1 To 4: colScale(j) = 1: Next j
+        For pass = 1 To 2
             For j = 1 To 4
-                If Abs(ainVals(i, j)) > rowMax Then rowMax = Abs(ainVals(i, j))
+                vMax = 0
+                For i = 1 To nRowsC
+                    If Abs(ainVals(i, j)) > vMax Then vMax = Abs(ainVals(i, j))
+                Next i
+                If vMax > 0 Then
+                    For i = 1 To nRowsC
+                        ainVals(i, j) = ainVals(i, j) / vMax
+                    Next i
+                    colScale(j) = colScale(j) * vMax
+                End If
             Next j
-            If Abs(binVals(i)) > rowMax Then rowMax = Abs(binVals(i))
-            If rowMax > 0.000000000001 Then
+            For i = 1 To nRowsC
+                vMax = 0
                 For j = 1 To 4
-                    ainVals(i, j) = ainVals(i, j) / rowMax
+                    If Abs(ainVals(i, j)) > vMax Then vMax = Abs(ainVals(i, j))
                 Next j
-                binVals(i) = binVals(i) / rowMax
-            End If
+                If vMax > 0 Then
+                    For j = 1 To 4
+                        ainVals(i, j) = ainVals(i, j) / vMax
+                    Next j
+                    binVals(i) = binVals(i) / vMax
+                End If
+            Next i
+        Next pass
+
+        ' Right-hand side of order one, so that the scaled variables are of order one too
+        ' (the solver reports them with a limited number of digits).
+        vMax = 0
+        For i = 1 To nRowsC
+            If Abs(binVals(i)) > vMax Then vMax = Abs(binVals(i))
         Next i
+        If vMax > 0 Then
+            For i = 1 To nRowsC
+                binVals(i) = binVals(i) / vMax
+            Next i
+            For j = 1 To 4
+                colScale(j) = colScale(j) / vMax
+            Next j
+        End If
+
+        .Range("A4").Value = "ColumnScale"
+        For j = 1 To 4
+            .Cells(4, j + 1).Value = colScale(j)
+        Next j
 
         rowCounter = 5
         For i = 1 To nRowsC

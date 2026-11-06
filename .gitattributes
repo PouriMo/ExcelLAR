@@ -5,3 +5,5 @@
 *.xlam binary
 *.lsp -text
 *.csv -text
+*.dwg binary
+*.xlsx binary

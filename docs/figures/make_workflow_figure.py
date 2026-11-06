@@ -4,7 +4,7 @@ import re
 import sys
 
 OUT = sys.argv[1]          # output path without extension
-SUBS = "abs"               # matrix subscript used in the paper ("abs" as in the old figure, or "ass" as in the code)
+SUBS = "as"                # matrix subscript used in the paper
 
 W, H = 1860, 2440
 SANS = "Arial, 'Liberation Sans', Helvetica, sans-serif"
@@ -105,7 +105,7 @@ CX = 366   # main column centre
 line([(CX, 138), (CX, 183)])
 module(10, 185, 712, 205, "USER INTERFACE: ExcelLAR Form",
        ["Import CSV into the workbook",
-        "Validate interface data & live load"])
+        "Check interface data, stereotomy, live load"])
 line([(CX, 390), (CX, 433)])
 module(10, 435, 712, 210, "MODULE 1 & 2: Pre-processing",
        ["Read block geometry & locate interfaces",
@@ -117,7 +117,7 @@ module(30, 695, 672, 272, "MODULE 3 & 4: Variable Reduction",
         "Compute reduced constraints A_{in} and b_{in}"])
 line([(CX, 967), (CX, 1015)])
 module(70, 1017, 590, 150, "MODULE 5: Optimization Setup",
-       ["Apply Row Normalization Algorithm"])
+       ["Scale rows, columns and RHS"])
 line([(CX, 1167), (CX, 1215)])
 
 # Module 6 group
@@ -129,18 +129,18 @@ text(CX, 1388, "Limit Analysis", 30, bold=True, anchor="middle")
 line([(CX, 1415), (CX, 1477)], both=True)
 box(190, 1480, 352, 102, rx=28)
 text(CX, 1522, "LP Solver:", 30, bold=True, anchor="middle")
-text(CX, 1558, "OpenSolver (max λ)", 29, anchor="middle")
+text(CX, 1558, "OpenSolver, CBC (max λ_{u})", 26, anchor="middle")
 line([(CX, 1582), (CX, 1650)])
 box(120, 1652, 492, 140, rx=28)
 text(CX, 1696, "Back-substitution:", 30, bold=True, anchor="middle")
-text(CX, 1734, "N, V, M at all interfaces", 29, anchor="middle")
+text(CX, 1734, "N, V, M, |V/N| at all interfaces", 29, anchor="middle")
 text(CX, 1772, "e_{i} = M_{i} / N_{i}", 29, anchor="middle")
 line([(CX, 1827), (CX, 1873)])
 
-module(30, 1875, 672, 280, "MODULE 9: Collapse Mechanism",
+module(30, 1875, 672, 280, "MODULE 7: Collapse Mechanism",
        ["Hinge candidates where |e_{i}| ≈ t_{i}/2",
         "Test every 4-hinge set kinematically",
-        "Keep smallest λ_{kin}; check against λ"])
+        "Keep smallest λ_{kin}; check against λ_{u}"])
 
 # ---------------------------------------------------------------- decision + outputs
 DX, DY = 1000, 2015
@@ -161,31 +161,29 @@ text(DX, 1797, "(no deformed shape)", 26, anchor="middle")
 # True -> visualisation
 line([(DX + 190, DY), (1238, DY)])
 text(DX + 150, DY - 62, "True", 34, bold=True, anchor="middle")
-module(1240, 1875, 610, 345, "MODULE 7, 8 & 10: Visualization",
-       ["Plot thrust line & hinges (M7)",
-        "Rotate the three rigid links (M8)",
-        "Plot deformed collapse shape (M8)",
+module(1240, 1875, 610, 345, "MODULE 8, 9 & 10: Visualization",
+       ["Plot thrust line & hinges (M8)",
+        "Rotate the three rigid links (M9)",
+        "Plot deformed collapse shape (M9)",
         "Equal-aspect chart axes (M10)"], gap=57)
 
 # ---------------------------------------------------------------- algorithm panels (right column)
 AX, AW = 868, 886
-algorithm(AX, 210, AW, "Algorithm: Row Normalization (Module 5)", [
-    "**for** i = 1 **to** nRows",
-    "  rowMax = |b(i)|",
-    "  **for** j = 1 **to** nCols          (N, V, M, λ)",
-    "    **if** |A(i,j)| > rowMax **then** rowMax = |A(i,j)|",
-    "  **end**",
-    "  **if** rowMax > 1e-12 **then**",
-    "    **for** j = 1 **to** nCols",
-    "      A(i,j) = A(i,j) / rowMax",
-    "    **end**",
-    "    b(i) = b(i) / rowMax",
-    "  **end**",
+algorithm(AX, 210, AW, "Algorithm: Scaling of the LP Table (Module 5)", [
+    "s(j) = 1 for the columns (N, V, M, λ)",
+    "**repeat** twice",
+    "  **for each** column j: c = max|A(:,j)|",
+    "    A(:,j) = A(:,j) / c,  s(j) = s(j) · c",
+    "  **for each** row i: r = max|A(i,:)|",
+    "    A(i,:) = A(i,:) / r,  b(i) = b(i) / r",
     "**end**",
+    "m = max|b|,  b = b / m,  s = s / m",
+    "solve for z = s · x, then x = z / s",
+    "check A · z ≤ b on the sheet",
 ])
 line([(660, 1092), (748, 1092), (748, 445), (866, 445)], dashed=True)
 
-algorithm(AX, 740, AW, "Algorithm: Collapse Mechanism (Module 9)", [
+algorithm(AX, 740, AW, "Algorithm: Collapse Mechanism (Module 7)", [
     "cand = {i : |e_{i}|/(t_{i}/2) ≥ 0.98}  (≤3 per run)",
     "     ∪ local peaks with ratio ≥ 0.5 (≤30)",
     "λ_{best} = ∞",
@@ -198,7 +196,7 @@ algorithm(AX, 740, AW, "Algorithm: Collapse Mechanism (Module 9)", [
     "**end**",
     "**if** none found **then** repeat with",
     "  the 40 largest ratios",
-    "check |λ_{kin} − λ| ≤ 1% · λ",
+    "check |λ_{kin} − λ_{u}| ≤ 1% · λ_{u}",
 ])
 line([(702, 1920), (800, 1920), (800, 1110), (866, 1110)], dashed=True)
 
@@ -210,8 +208,8 @@ items = [
     ("ExcelLAR.frm","user form, Run All, export"),
     ("Module_Launcher", "opens the form"),
     ("ModuleImage", "PNG export & preview panels"),
-    ("Module 0", "Solver add-in loader"),
-    ("Module 9 utilities", "CSV reader, edge geometry"),
+    ("Module 0", "analysis driver, dependency check"),
+    ("Module 7 utilities", "CSV reader, joint check"),
 ]
 for k, (n, d) in enumerate(items):
     col, row = k % 3, k // 3

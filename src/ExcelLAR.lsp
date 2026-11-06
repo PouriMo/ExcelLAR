@@ -1,4 +1,4 @@
-(defun c:ExcelLAR (/ ss_blocks ss_fill pt_left pt_right center_pt output_file f
+(defun c:ExcelLAR (/ unit_sys u_len u_for w_factor ss_blocks ss_fill pt_left pt_right center_pt output_file f
                     depth gamma has_fill fill_depth fill_gamma
                     force_input force_indices force_list f_method vec_str vec_vals fx fy p1 p2 len
                     block_data fill_data sorted_blocks final_blocks
@@ -41,13 +41,26 @@
   ;; 2. PROPERTIES & FORCES INPUT
   ;; ==========================================
   (princ "\n\n--- STEP 4: NUMERICAL PROPERTIES ---")
-  (while (not (setq depth (getreal "\nEnter blocks' depth (d) in mm: "))))
-  (while (not (setq gamma (getreal "\nEnter blocks' specific weight (gamma) in kg/m^3: "))))
+  ;; Mm: drawing in mm, density in kg/m^3, forces in N.
+  ;; Metre: drawing in m, specific weight in kN/m^3, forces in kN and moments in kNm.
+  (initget "Mm Metre")
+  (setq unit_sys (getkword "\nUnits of the drawing [Mm/Metre] <Mm>: "))
+  (if (null unit_sys) (setq unit_sys "Mm"))
+  (if (= unit_sys "Metre")
+    (setq u_len "m" u_for "kN" w_factor 1.0)
+    (setq u_len "mm" u_for "N" w_factor (* 9.81 0.000000001))
+  )
+  (while (not (setq depth (getreal (strcat "\nEnter blocks' depth (d) in " u_len ": ")))))
+  (while (not (setq gamma (getreal (if (= unit_sys "Metre")
+                                     "\nEnter blocks' specific weight (gamma) in kN/m^3: "
+                                     "\nEnter blocks' density (gamma) in kg/m^3: ")))))
   
   (if (= has_fill "Yes")
     (progn
-      (while (not (setq fill_depth (getreal "\nEnter backfill depth in mm: "))))
-      (while (not (setq fill_gamma (getreal "\nEnter backfill specific weight in kg/m^3: "))))
+      (while (not (setq fill_depth (getreal (strcat "\nEnter backfill depth in " u_len ": ")))))
+      (while (not (setq fill_gamma (getreal (if (= unit_sys "Metre")
+                                              "\nEnter backfill specific weight in kN/m^3: "
+                                              "\nEnter backfill density in kg/m^3: ")))))
     )
   )
 
@@ -100,11 +113,11 @@
           (setvar "DELOBJ" 0)
 
           ;; Extract geometry properties and sort blocks left-to-right
-          (setq block_data (ExtractGeomProps ss_blocks depth gamma))
+          (setq block_data (ExtractGeomProps ss_blocks depth gamma w_factor))
           (setq sorted_blocks (vl-sort block_data '(lambda (a b) (< (car (nth 2 a)) (car (nth 2 b))))))
 
           (if (= has_fill "Yes")
-            (setq fill_data (ExtractGeomProps ss_fill fill_depth fill_gamma))
+            (setq fill_data (ExtractGeomProps ss_fill fill_depth fill_gamma w_factor))
           )
 
           ;; --- NEW ROBUST BACKFILL ASSIGNMENT LOGIC ---
@@ -292,7 +305,7 @@
           (setq max_rows (max (length node_rows) (length line_lengths)))
 
           ;; Write Output (Perfectly aligned columns)
-          (write-line "Block,X [mm],Y [mm],,Interface,Len [mm],Ds [mm],Fi [deg],Depth [mm],Weight [N],,Fx_lam [N],Fy_lam [N],Backfill_Added" f)
+          (write-line (strcat "Block,X [" u_len "],Y [" u_len "],,Interface,Len [" u_len "],Ds [" u_len "],Fi [deg],Depth [" u_len "],Weight [" u_for "],,Fx_lam [" u_for "],Fy_lam [" u_for "],Backfill_Added") f)
           (setq row_idx 0)
           (while (< row_idx max_rows)
             
@@ -305,7 +318,7 @@
               (progn
                 (setq len_val (nth row_idx line_lengths) fi_val (nth row_idx line_angles))
                 (setq ds_val (if (< row_idx (length ds_values)) (rtos (nth row_idx ds_values) 2 6) ""))
-                (setq weight_val (if (< row_idx (length final_blocks_with_forces)) (rtos (nth 1 (nth row_idx final_blocks_with_forces)) 2 6) ""))
+                (setq weight_val (if (< row_idx (length final_blocks_with_forces)) (rtos (nth 1 (nth row_idx final_blocks_with_forces)) 2 9) ""))
                 (setq int_row (strcat "Interface " (itoa (1+ row_idx)) "," (rtos len_val 2 6) "," ds_val "," (rtos fi_val 2 6) "," (rtos depth 2 6) "," weight_val))
               )
               (setq int_row ",,,,,")
@@ -343,7 +356,7 @@
   (list (list (car p1) (cadr p1)) (list (car p2) (cadr p2)))
 )
 
-(defun ExtractGeomProps (ss d g / i ent reg obj cent area weight pts data_list last_ent)
+(defun ExtractGeomProps (ss d g wf / i ent reg obj cent area weight pts data_list last_ent)
   (setq i 0 data_list '())
   (while (< i (sslength ss))
     (setq ent (ssname ss i))
@@ -358,7 +371,7 @@
         (setq cent (vlax-safearray->list (vlax-variant-value (vla-get-Centroid obj))))
         (setq area (vla-get-Area obj))
         (vla-delete obj)
-        (setq weight (* g area d 9.81 0.000000001))
+        (setq weight (* g area d wf))
         (setq data_list (append data_list (list (list ent weight cent pts))))
       )
       (princ "\nWarning: A polyline could not be converted to a Region. Ensure it is closed and planar.")

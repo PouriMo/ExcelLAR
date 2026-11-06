@@ -13,8 +13,6 @@ Public Function SolveLinearSystem(G As Variant, b As Variant) As Variant
     n = UBound(G, 1)
     m = UBound(b, 2)
 
-    Debug.Print "SolveLinearSystem: n=" & n & " m=" & m   ' <-- INSIDE the function
-
     ' Build augmented matrix [G | B]
     Dim A() As Double
     ReDim A(1 To n, 1 To n + m)
@@ -62,14 +60,6 @@ Public Function SolveLinearSystem(G As Variant, b As Variant) As Variant
             End If
         Next k
     Next i
-
-    ' --- diagnostic: smallest pivot ---
-    Dim minPivot As Double: minPivot = 1E+30
-    For i = 1 To n
-        If Abs(A(i, i)) < minPivot Then minPivot = Abs(A(i, i))
-    Next i
-    Debug.Print "  smallest pivot = " & minPivot
-    ' ----------------------------------
 
     ' Back-substitution
     Dim X() As Double

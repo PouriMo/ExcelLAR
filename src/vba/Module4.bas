@@ -106,7 +106,7 @@ Sub CreateAinSheet()
     Exit Sub
 
 ErrorHandler:
-    MsgBox "Error in CreateAinSheet: " & Err.Description, vbCritical
+    Err.Raise vbObjectError + 514, "CreateAinSheet", "Error in CreateAinSheet: " & Err.Description
 End Sub
 
 Sub CreateBinSheet()
@@ -178,7 +178,7 @@ Sub CreateBinSheet()
     Exit Sub
 
 ErrorHandler:
-    MsgBox "Error in CreateBinSheet: " & Err.Description, vbCritical
+    Err.Raise vbObjectError + 515, "CreateBinSheet", "Error in CreateBinSheet: " & Err.Description
 End Sub
 
 Function MultiplyMatrices(mat1 As Variant, mat2 As Variant) As Variant

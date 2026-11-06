@@ -19,6 +19,10 @@ Option Explicit
 ' PNG export quality selectors, created at run time next to the Export buttons
 Private cmbQualityThrust As MSForms.ComboBox
 Private cmbQualityDeformed As MSForms.ComboBox
+' Results and unit selectors, created at run time in the frames of the form
+Private txtPu As MSForms.TextBox
+Private WithEvents cmbUnitL As MSForms.ComboBox
+Private WithEvents cmbUnitF As MSForms.ComboBox
 
 ' ==================== Helper: Get the user's workbook ====================
 Private Function UserWorkbook() As Workbook
@@ -41,6 +45,7 @@ End Sub
 
 ' ==================== Form Initialize ====================
 Private Sub UserForm_Initialize()
+    Call LayoutResultsAndUnits
     Call RefreshSheetList
     txtLambda.Value = "-"
     txtHinges.Value = "-"
@@ -62,6 +67,84 @@ Private Sub UserForm_Initialize()
     Set cmbQualityDeformed = AddQualityPicker(btnExportDeformed)
 
     Call LogMsg("Ready. Load or select a CSV data sheet to begin.")
+    Dim depMsg As String
+    depMsg = CheckDependencies()
+    If Len(depMsg) > 0 Then
+        Call LogMsg("Warning: " & Replace(depMsg, vbCrLf, " "))
+        MsgBox depMsg, vbExclamation, "ExcelLAR: missing component"
+    End If
+End Sub
+
+' Results panel: dimensionless multiplier and collapse force. Analysis panel: unit labels.
+Private Sub LayoutResultsAndUnits()
+    Dim lbl As MSForms.Label, itm As Variant
+
+    Label1.Caption = "ExcelLAR:  Static Limit Analysis of arches"
+
+    Label4.Caption = "Lambda_u:"
+    Label4.Left = 12: Label4.Top = 12: Label4.Width = 72
+    txtLambda.Left = 84: txtLambda.Top = 8: txtLambda.Width = 78: txtLambda.Height = 22
+
+    Label7.Left = 12: Label7.Top = 38: Label7.Width = 72
+    Set txtPu = Frame3.Controls.Add("Forms.TextBox.1", "txtPu", True)
+    With txtPu
+        .Left = 84: .Top = 34: .Width = 78: .Height = 22
+        .Font.Name = txtLambda.Font.Name: .Font.Size = txtLambda.Font.Size
+        .Locked = True: .Value = "-"
+    End With
+
+    Label6.Caption = "Hinges:"
+    Label6.Left = 12: Label6.Top = 64: Label6.Width = 72
+    txtHinges.Left = 84: txtHinges.Top = 60: txtHinges.Width = 78: txtHinges.Height = 22
+    btnShowThrust.Top = 96
+    btnShowDeformed.Top = 132
+
+    btnRunAll.Top = 8
+    chkAutoPlots.Top = 36
+    Set lbl = Frame2.Controls.Add("Forms.Label.1", "lblUnits", True)
+    With lbl
+        .Caption = "Units:": .Left = 12: .Top = 68: .Width = 40: .BackStyle = fmBackStyleTransparent
+        .Font.Name = Label4.Font.Name: .Font.Size = Label4.Font.Size
+    End With
+    Set cmbUnitL = Frame2.Controls.Add("Forms.ComboBox.1", "cmbUnitL", True)
+    With cmbUnitL
+        .Left = 54: .Top = 64: .Width = 52: .Height = 20
+        For Each itm In Array("mm", "cm", "m")
+            .AddItem itm
+        Next itm
+        .Value = "mm"
+        .ControlTipText = "Length unit of the data sheet (label only: no conversion is made)"
+    End With
+    Set cmbUnitF = Frame2.Controls.Add("Forms.ComboBox.1", "cmbUnitF", True)
+    With cmbUnitF
+        .Left = 112: .Top = 64: .Width = 52: .Height = 20
+        For Each itm In Array("N", "kN")
+            .AddItem itm
+        Next itm
+        .Value = "N"
+        .ControlTipText = "Force unit of the data sheet (label only: no conversion is made)"
+    End With
+    Call UpdateUnitLabel
+End Sub
+
+Private Sub cmbUnitF_Change()
+    Call UpdateUnitLabel
+End Sub
+
+Private Sub UpdateUnitLabel()
+    If Not cmbUnitF Is Nothing Then Label7.Caption = "P_u [" & cmbUnitF.Value & "]:"
+End Sub
+
+' The unit labels follow the headers of the selected data sheet.
+Private Sub cmbDataSheet_Change()
+    If cmbUnitL Is Nothing Or cmbUnitF Is Nothing Then Exit Sub
+    If Len(CStr(cmbDataSheet.Value)) = 0 Then Exit Sub
+    Dim wb As Workbook: Set wb = ActiveWorkbook
+    If wb Is Nothing Then Exit Sub
+    If SheetExists(wb, CStr(cmbDataSheet.Value)) Then
+        cmbUnitL.Value = UnitFromHeader(wb.Sheets(CStr(cmbDataSheet.Value)), 2, "mm")
+        cmbUnitF.Value = UnitFromHeader(wb.Sheets(CStr(cmbDataSheet.Value)), 10, "N")
+    End If
 End Sub
 
 ' Adds "PNG quality: [list]" on the same row as an Export button, left of the buttons there.
@@ -133,7 +216,7 @@ Private Sub RefreshSheetList()
     For Each ws In wbUser.Worksheets
         Select Case ws.Name
             Case "Gass_in", "Gass", "Fass", "Ain", "Bin", "optimization", _
-                 "ForcesTable", "ThrustPlot", "DeformedPlot"
+                 "ForcesTable", "ThrustPlot", "DeformedPlot", "RunInfo"
                 ' skip generated sheets
             Case Else
                 If Left(CStr(ws.Cells(2, 1).Value), 5) = "Block" Then
@@ -202,108 +285,40 @@ Private Sub btnRunAll_Click()
     On Error GoTo ErrorHandler
     Application.ScreenUpdating = False
 
-    Dim wbUser As Workbook
+    Dim wbUser As Workbook, errMsg As String
     Set wbUser = UserWorkbook()
-    wbUser.Sheets(dataSheet).Activate
+    Call SetUnits(CStr(cmbUnitL.Value), CStr(cmbUnitF.Value))
 
-    Call LogMsg("=== Starting full analysis on '" & wbUser.Name & "' ===")
+    Set gLogTarget = Me
+    errMsg = RunAnalysis(wbUser, dataSheet, chkAutoPlots.Value)
+    Set gLogTarget = Nothing
 
-    ' Input checks before the solver: interface data against the block geometry, live load present
-    Dim dataMsg As String, nbChk As Long
-    Dim cbx() As Variant, cby() As Variant, cfx() As Variant, cfy() As Variant
-    dataMsg = RepairInterfaceData(wbUser.Sheets(dataSheet))
-    If Left(dataMsg, 6) = "ERROR:" Then
+    If Len(errMsg) > 0 Then
         Application.ScreenUpdating = True
-        Call LogMsg(dataMsg)
-        MsgBox Mid(dataMsg, 8), vbCritical, "Invalid geometry data"
-        Exit Sub
-    ElseIf Len(dataMsg) > 0 Then
-        Call LogMsg("Data check: " & dataMsg & " (cells highlighted in yellow).")
-    End If
-    Call ReadCSVGeometry(wbUser.Sheets(dataSheet), cbx, cby, cfx, cfy, nbChk)
-    If Not HasLiveLoad(wbUser.Sheets(dataSheet), nbChk) Then
-        Application.ScreenUpdating = True
-        Call LogMsg("ERROR: no live load in the data sheet (Fx_lam / Fy_lam are all zero).")
-        MsgBox "The data sheet has no live load: all Fx_lam / Fy_lam values (columns L and M) are zero." & vbCrLf & _
-               "Without a load to scale, the collapse multiplier is unbounded and the solver fails." & vbCrLf & _
-               "Re-export the CSV and enter the loaded block number(s) and the load vector.", _
-               vbCritical, "No live load"
+        MsgBox errMsg, vbCritical, "Analysis stopped"
         Exit Sub
     End If
 
-    Call LogMsg("Step 1/6: Generating Gass_in matrix...")
-    Application.Run "Generate_Gass_in"
-
-    wbUser.Sheets(dataSheet).Activate
-    Call LogMsg("Step 2/6: Generating Gass matrix...")
-    Application.Run "GenerateGassMatrix"
-
-    wbUser.Sheets(dataSheet).Activate
-    Call LogMsg("Step 3/6: Creating Fass sheet...")
-    Application.Run "CreateFassSheet"
-
-    Call LogMsg("Step 4a/6: Creating Ain matrix...")
-    Application.Run "CreateAinSheet"
-
-    Call LogMsg("Step 4b/6: Creating Bin vector...")
-    Application.Run "CreateBinSheet"
-
-    Call LogMsg("Step 5/6: Building optimization sheet...")
-    Application.Run "CreateOptimizationSheet"
-
-    Call LogMsg("Step 6/6: Running Solver + back-substitution...")
-    Application.Run "RunSolverAndBackSubstitute"
-
-    Dim wsForces As Worksheet
-    Set wsForces = wbUser.Sheets("ForcesTable")
-    txtLambda.Value = Format(wsForces.Range("G2").Value, "0.0000")
-
-    ' Collapse mechanism: four hinges checked kinematically (FindCollapseMechanism, Module9).
-    ' Its kinematic multiplier must equal the static lambda of the solver.
-    Dim hIdx() As Long, hSide() As Long, hX() As Double, hY() As Double
-    Dim lamKin As Double, mechSign As Long, nFinal As Long, lamStat As Double
-    lamStat = wsForces.Range("G2").Value
-    If FindCollapseMechanismForSheet(wbUser.Sheets(dataSheet), wsForces, hIdx, hSide, hX, hY, lamKin, mechSign) Then
-        nFinal = 4
-        Call LogMsg("Collapse mechanism: hinges at interfaces " & hIdx(1) & ", " & hIdx(2) & ", " & _
-                    hIdx(3) & ", " & hIdx(4) & " (kinematic lambda = " & Format(lamKin, "0.0000") & ").")
-        If lamStat <> 0 Then
-            If Abs(lamKin - lamStat) > 0.01 * Abs(lamStat) Then
-                Call LogMsg("Warning: the kinematic lambda of the mechanism differs from the solver lambda by " & _
-                            Format(Abs(lamKin - lamStat) / Abs(lamStat) * 100, "0.0") & _
-                            "% - the solver result may be inaccurate.")
-            End If
-        End If
-    Else
-        nFinal = 0
-        Call LogMsg("Warning: no admissible four-hinge collapse mechanism could be formed from the thrust line.")
-    End If
-    txtHinges.Value = CStr(nFinal)
-
-
+    txtLambda.Value = Format(gResult.lam, "0.0000")
+    txtPu.Value = Format(gResult.Pu, "0.0000")
+    txtHinges.Value = CStr(gResult.nHinges)
     btnShowThrust.Enabled = True
     btnShowDeformed.Enabled = True
 
-    Call LogMsg("=== Analysis complete! Lambda = " & _
-                Format(wsForces.Range("G2").Value, "0.0000") & " N ===")
-
     If chkAutoPlots.Value Then
-        Call LogMsg("Generating thrust line plot...")
-        Application.Run "PlotThrustLine", wbUser.Sheets(dataSheet)
-        Call LogMsg("Generating deformed shape plot...")
-        Application.Run "PlotDeformedShape", wbUser.Sheets(dataSheet)
-        Call LogMsg("Plots created on 'ThrustPlot' and 'DeformedPlot' sheets.")
         Call UpdateImagePanels(wbUser, wbUser.Sheets(dataSheet))
         MultiPage1.Value = 1
     End If
 
     Application.ScreenUpdating = True
     MsgBox "Analysis complete!" & vbCrLf & _
-           "Lambda = " & Format(wsForces.Range("G2").Value, "0.0000") & " N" & vbCrLf & _
-           "Hinges: " & nFinal, vbInformation, "Done"
+           "Lambda_u = " & Format(gResult.lam, "0.0000") & vbCrLf & _
+           "P_u = " & Format(gResult.Pu, "0.0000") & " " & UnitForce() & vbCrLf & _
+           "Hinges: " & gResult.nHinges, vbInformation, "Done"
     Exit Sub
 
 ErrorHandler:
+    Set gLogTarget = Nothing
     Application.ScreenUpdating = True
     Call LogMsg("ERROR: " & Err.Description)
     MsgBox "Analysis failed: " & Err.Description, vbCritical
@@ -346,7 +361,7 @@ Private Sub btnClose_Click()
 End Sub
 
 ' ==================== Logger ====================
-Private Sub LogMsg(msg As String)
+Public Sub LogMsg(ByVal msg As String)
     Dim timestamp As String
     timestamp = Format(Now, "hh:mm:ss")
     If Len(txtLog.Value) = 0 Then
