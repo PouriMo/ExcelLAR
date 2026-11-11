@@ -7,3 +7,5 @@
 *.csv -text
 *.dwg binary
 *.xlsx binary
+*.bat -text
+*.ps1 -text

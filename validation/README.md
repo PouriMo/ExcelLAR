@@ -4,9 +4,9 @@ These Python scripts check ExcelLAR without using any of its code. They need Num
 
 `lbla.py` reads a data sheet, assembles the equilibrium and admissibility conditions and solves the full linear program with HiGHS. `python lbla.py ../examples` prints the multiplier of every example.
 
-`refine.py` generates the radial refinement series of case study b in `../examples/convergence/`. `ref2.py` computes the exact reference: the four-hinge kinematic multiplier of the continuous ring, with closed-form integrals of the self-weight and hinge positions free along the arch. The value is 10.84. At the hinges of the 1100-block model the same expression returns 11.0042, which is the linear-programming result of that model.
+`refine.py` generates the radial refinement series of case study b in `../examples/convergence/`. `ref2.py` computes the reference of the continuous arch, which ExcelLAR cannot model since it works on discrete blocks: the four-hinge kinematic multiplier of the continuous ring, with closed-form integrals of the self-weight and hinge positions free along the arch. The value is 10.84.
 
-`minthick.py` finds the minimum thickness of a semicircular arch under self-weight, for radial and for vertical joints. With 400 blocks it gives t/R = 0.1075 and 0.1095.
+`minthick.py` finds the minimum thickness of a semicircular arch under self-weight, for radial and for vertical joints. With 400 blocks it gives t/R = 0.1075 and 0.1095. It also writes the 100-block models of `../examples/stereotomy/`, which ExcelLAR solves with t/R = 0.1075 and 0.1093.
 
 `conditioning.py` computes the condition number of the matrix G1 for different choices of the interface kept as independent.
 

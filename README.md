@@ -23,18 +23,15 @@ Excel for Mac is not supported, because the plots use Windows libraries. The cod
 
 ## Installation
 
-No macro or Trust Center setting has to be lowered, and "Trust access to the VBA project object model" is not needed.
+The simplest route is the installer. Download the repository (green **Code** button, **Download ZIP**), extract the ZIP file, and double-click `Install_ExcelLAR.bat`. It checks Excel, verifies the checksum of the add-in, copies it to the Excel add-in folder, finds OpenSolver or opens its download page, registers both add-ins and runs a test example. No macro, Trust Center or system setting is lowered, and no administrator right is needed. `Uninstall_ExcelLAR.bat` removes the add-in.
 
-1. Download `OpenSolver` from https://opensolver.org.
-2. Right-click the ZIP file, choose **Properties**, tick **Unblock**, click **OK**, and extract it to a permanent folder.
-3. Download `src/ExcelLAR.xlam` and save it in a permanent folder.
-4. Right-click the file, choose **Properties**, tick **Unblock**, and click **OK**. Windows marks downloaded files, and Excel blocks their macros until this is done.
-5. In Excel, go to **File** > **Options** > **Add-ins**, choose **Excel Add-ins** in the **Manage** list, and click **Go**.
-6. Click **Browse**, select `OpenSolver.xlam`, and click **OK**. Repeat for `ExcelLAR.xlam`. Both must be ticked in the list.
+[INSTALL.md](INSTALL.md) describes every step of the installer, the manual installation and the troubleshooting in detail. In short, the manual installation is:
+
+1. Download `OpenSolver` from https://opensolver.org, tick **Unblock** in the Properties of the ZIP file, and extract it to a permanent folder such as `C:\OpenSolver`.
+2. Save `src/ExcelLAR.xlam` in a permanent folder and tick **Unblock** in its Properties.
+3. In Excel, go to **File** > **Options** > **Add-ins**, choose **Excel Add-ins**, click **Go**, then **Browse**, and select `OpenSolver.xlam` and `ExcelLAR.xlam`. Both must be ticked.
 
 Press **Ctrl+Shift+A** in any workbook to open ExcelLAR. If OpenSolver is missing, the window says what to do.
-
-To check the download, compare the SHA-256 of the add-in with `SHA256SUMS.txt`. In PowerShell: `Get-FileHash ExcelLAR.xlam -Algorithm SHA256`.
 
 ![OpenSolver and ExcelLAR in the Add-ins dialog](docs/figures/fig2_addins_dialog.png)
 
@@ -55,7 +52,7 @@ The steps below reproduce case study a of the paper. The table lists every examp
 | Case c, load moved | `ImperfectionRole.csv` | 3 | 6.79 | 1, 4, 8, 12 |
 | Case d | `11BlocksArch_Backfill.csv` | 2 | 19.01 | 1, 3, 7, 12 |
 
-In these files |F_ref| = 1 N, so Pu in newtons equals λu. The refinement series of case b is in `examples/convergence/`. `Minimal_5Blocks.csv` is a small file with rounded numbers, useful as a template for writing data by hand. `results/` holds the macro-free workbooks of all these analyses, with every intermediate sheet.
+In these files |F_ref| = 1 N, so Pu in newtons equals λu. The refinement series of case b is in `examples/convergence/`. `Minimal_5Blocks.csv` is a five-block file with simple coordinates, useful as a template for writing data by hand. `examples/stereotomy/` holds the minimum-thickness models with radial and vertical joints. `results/` holds the macro-free workbooks of all these analyses, with every intermediate sheet.
 
 ### Step 1: geometry in AutoCAD (optional)
 
@@ -121,7 +118,7 @@ Before the solver starts, ExcelLAR checks that consecutive blocks share an edge,
 
 ## Reproducing the validation
 
-`validation/` holds an independent Python implementation of the same linear program (`lbla.py`), the exact four-hinge reference of case study b (`refine.py`, `ref2.py`) and the minimum-thickness study (`minthick.py`). See `validation/README.md`.
+`validation/` holds an independent Python implementation of the same linear program (`lbla.py`), the exact four-hinge reference of case study b (`refine.py`, `ref2.py`) and the minimum-thickness study (`minthick.py`, with the ExcelLAR models in `examples/stereotomy/`). See `validation/README.md`.
 
 ## Developer access
 
@@ -132,7 +129,7 @@ The VBA source is in `src/vba/`. Modules 1 to 9 follow the execution order; Modu
 | Symptom | Cause and remedy |
 |---|---|
 | Macros blocked, or a red "Security Risk" bar | The file still carries the download mark. Close Excel and repeat the **Unblock** step. Alternatively, put it in a Trusted Location folder of your own (**Trust Center Settings** > **Trusted Locations**). Do not enable all macros. |
-| "OpenSolver is not loaded" | Install it as in [Installation](#installation), and unblock the ZIP file before extracting it. |
+| "OpenSolver is not loaded" | Install it as in [Installation](#installation), and unblock the ZIP file before extracting it. Then run `Install_ExcelLAR.bat` again. |
 | OpenSolver starts but fails | Its folder must not contain non-English characters. Extract it again to a simple path such as `C:\OpenSolver`. |
 | The add-in is not in the list | Use **Browse** and select the file again, and check that it was not left in the Downloads folder or inside the ZIP file. |
 | "do not share an edge", "overlap" or "joints touch" | The drawing does not form a chain of blocks: see [Input checks](#input-checks). |

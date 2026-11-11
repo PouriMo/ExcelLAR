@@ -4,6 +4,9 @@
 
 ### Installation and security
 
+An installer is added: `Install_ExcelLAR.bat` checks Excel, verifies the checksum, copies and unblocks the add-in, finds or helps to install OpenSolver, registers both add-ins and runs a test example. `Uninstall_ExcelLAR.bat` removes the add-in. `INSTALL.md` documents the installer, the manual installation and the troubleshooting.
+
+
 The add-in is rebuilt from the source files and contains no leftover worksheets. The VBA reference to `SOLVER.XLAM` at a fixed Office path is removed; it could stop the project from compiling on another computer. No routine uses the VBA project object model any more, so "Trust access to the VBA project object model" is not needed. The Excel Solver add-in is no longer a dependency. OpenSolver is called through its public API without a VBA reference, and the window explains what to do if it is missing.
 
 ### Linear program
@@ -30,7 +33,7 @@ The hinge thresholds can be varied with `TestHingeThresholds` for sensitivity st
 
 ### Examples and validation
 
-`55BlocksArch.csv` is replaced. The former file applied the load 0.79 mm away from the load point of the 11-block model; the new one keeps the same line of action with statically equivalent forces on two blocks (λu = 12.16, previously 11.67). New files: the refinement series in `examples/convergence/`, the drawings in `examples/cad/`, `Minimal_5Blocks.csv`, two files with the load moved, macro-free workbooks in `results/`, and an independent Python implementation in `validation/`.
+`55BlocksArch.csv` is replaced. The former file applied the load 0.79 mm away from the load point of the 11-block model; the new one keeps the same line of action with statically equivalent forces on two blocks (λu = 12.16, previously 11.67). New files: the refinement series in `examples/convergence/`, the drawings in `examples/cad/`, `Minimal_5Blocks.csv`, the minimum-thickness models of `examples/stereotomy/`, two files with the load moved, macro-free workbooks in `results/`, and an independent Python implementation in `validation/`.
 
 ## 1.0
 
